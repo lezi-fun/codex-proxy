@@ -64,9 +64,26 @@ export type GeminiContent = z.infer<typeof GeminiContentSchema>;
 
 // --- Response ---
 
+export interface GeminiFunctionCall {
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+export interface GeminiFunctionResponse {
+  name: string;
+  response?: Record<string, unknown>;
+}
+
+export interface GeminiPart {
+  text?: string;
+  thought?: boolean;
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: GeminiFunctionResponse;
+}
+
 export interface GeminiCandidate {
   content: {
-    parts: Array<{ text: string; thought?: boolean }>;
+    parts: GeminiPart[];
     role: "model";
   };
   finishReason?: "STOP" | "MAX_TOKENS" | "SAFETY" | "OTHER";

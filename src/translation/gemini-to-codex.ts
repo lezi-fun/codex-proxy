@@ -5,6 +5,7 @@
 import type {
   GeminiGenerateContentRequest,
   GeminiContent,
+  GeminiPart,
 } from "../types/gemini.js";
 import type {
   CodexResponsesRequest,
@@ -13,43 +14,83 @@ import type {
 import { resolveModelId, getModelInfo } from "../routes/models.js";
 import { getConfig } from "../config.js";
 import { buildInstructions, budgetToEffort } from "./shared-utils.js";
+import { geminiToolsToCodex, geminiToolConfigToCodex } from "./tool-format.js";
 
 /**
- * Extract text from Gemini content parts.
- * Flattens functionCall/functionResponse parts into readable text for Codex.
+ * Extract text-only content from Gemini parts.
  */
-function flattenParts(
-  parts: Array<{
-    text?: string;
-    thought?: boolean;
-    functionCall?: { name: string; args?: Record<string, unknown> };
-    functionResponse?: { name: string; response?: Record<string, unknown> };
-  }>,
-): string {
-  const textParts: string[] = [];
+function extractTextFromParts(parts: GeminiPart[]): string {
+  return parts
+    .filter((p) => !p.thought && p.text)
+    .map((p) => p.text!)
+    .join("\n");
+}
+
+/**
+ * Convert Gemini content parts into native Codex input items.
+ */
+function partsToInputItems(
+  role: "user" | "assistant",
+  parts: GeminiPart[],
+): CodexInputItem[] {
+  const items: CodexInputItem[] = [];
+  const hasFunctionParts = parts.some((p) => p.functionCall || p.functionResponse);
+
+  // Collect text content
+  const text = extractTextFromParts(parts);
+  if (text || !hasFunctionParts) {
+    items.push({ role, content: text });
+  }
+
+  // Track call_ids by function name to correlate functionCall → functionResponse
+  let callCounter = 0;
+  const nameToCallIds = new Map<string, string[]>();
+
   for (const p of parts) {
-    if (p.thought) continue;
-    if (p.text) {
-      textParts.push(p.text);
-    } else if (p.functionCall) {
+    if (p.functionCall) {
+      const callId = `fc_${callCounter++}`;
       let args: string;
       try {
-        args = JSON.stringify(p.functionCall.args ?? {}, null, 2);
+        args = JSON.stringify(p.functionCall.args ?? {});
       } catch {
-        args = String(p.functionCall.args);
+        args = "{}";
       }
-      textParts.push(`[Tool Call: ${p.functionCall.name}(${args})]`);
+      items.push({
+        type: "function_call",
+        call_id: callId,
+        name: p.functionCall.name,
+        arguments: args,
+      });
+      // Record call_id for this function name (for matching responses)
+      const ids = nameToCallIds.get(p.functionCall.name) ?? [];
+      ids.push(callId);
+      nameToCallIds.set(p.functionCall.name, ids);
     } else if (p.functionResponse) {
-      let resp: string;
+      let output: string;
       try {
-        resp = JSON.stringify(p.functionResponse.response ?? {}, null, 2);
+        output = JSON.stringify(p.functionResponse.response ?? {});
       } catch {
-        resp = String(p.functionResponse.response);
+        output = String(p.functionResponse.response);
       }
-      textParts.push(`[Tool Result (${p.functionResponse.name})]: ${resp}`);
+      // Match response to the earliest unmatched call with the same name
+      const ids = nameToCallIds.get(p.functionResponse.name);
+      const callId = ids?.shift() ?? `fc_${callCounter++}`;
+      items.push({
+        type: "function_call_output",
+        call_id: callId,
+        output,
+      });
     }
   }
-  return textParts.join("\n");
+
+  return items;
+}
+
+/**
+ * Extract text from Gemini content parts (for session hashing).
+ */
+function flattenParts(parts: GeminiPart[]): string {
+  return extractTextFromParts(parts);
 }
 
 /**
@@ -103,10 +144,11 @@ export function translateGeminiToCodexRequest(
   const input: CodexInputItem[] = [];
   for (const content of req.contents) {
     const role = content.role === "model" ? "assistant" : "user";
-    input.push({
-      role: role as "user" | "assistant",
-      content: flattenParts(content.parts),
-    });
+    const items = partsToInputItems(
+      role as "user" | "assistant",
+      content.parts as GeminiPart[],
+    );
+    input.push(...items);
   }
 
   // Ensure at least one input message
@@ -119,6 +161,10 @@ export function translateGeminiToCodexRequest(
   const modelInfo = getModelInfo(modelId);
   const config = getConfig();
 
+  // Convert tools to Codex format
+  const codexTools = req.tools?.length ? geminiToolsToCodex(req.tools) : [];
+  const codexToolChoice = geminiToolConfigToCodex(req.toolConfig);
+
   // Build request
   const request: CodexResponsesRequest = {
     model: modelId,
@@ -126,8 +172,13 @@ export function translateGeminiToCodexRequest(
     input,
     stream: true,
     store: false,
-    tools: [],
+    tools: codexTools,
   };
+
+  // Add tool_choice if specified
+  if (codexToolChoice) {
+    request.tool_choice = codexToolChoice;
+  }
 
   // Add previous response ID for multi-turn conversations
   if (previousResponseId) {
