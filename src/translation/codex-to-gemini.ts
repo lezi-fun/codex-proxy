@@ -39,6 +39,25 @@ export async function* streamCodexToGemini(
   for await (const evt of iterateCodexEvents(codexApi, rawResponse)) {
     if (evt.responseId) onResponseId?.(evt.responseId);
 
+    // Handle upstream error events
+    if (evt.error) {
+      const errorChunk: GeminiGenerateContentResponse = {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: `[Error] ${evt.error.code}: ${evt.error.message}` }],
+              role: "model",
+            },
+            finishReason: "OTHER",
+            index: 0,
+          },
+        ],
+        modelVersion: model,
+      };
+      yield `data: ${JSON.stringify(errorChunk)}\n\n`;
+      return;
+    }
+
     // Function call done → emit as a candidate with functionCall part
     if (evt.functionCallDone) {
       let args: Record<string, unknown> = {};
@@ -140,6 +159,9 @@ export async function collectCodexToGeminiResponse(
 
   for await (const evt of iterateCodexEvents(codexApi, rawResponse)) {
     if (evt.responseId) responseId = evt.responseId;
+    if (evt.error) {
+      throw new Error(`Codex API error: ${evt.error.code}: ${evt.error.message}`);
+    }
     if (evt.textDelta) fullText += evt.textDelta;
     if (evt.usage) {
       inputTokens = evt.usage.input_tokens;

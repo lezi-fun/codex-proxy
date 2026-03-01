@@ -74,6 +74,29 @@ export async function* streamCodexToAnthropic(
   for await (const evt of iterateCodexEvents(codexApi, rawResponse)) {
     if (evt.responseId) onResponseId?.(evt.responseId);
 
+    // Handle upstream error events
+    if (evt.error) {
+      // Close current text block if open
+      if (textBlockStarted) {
+        yield formatSSE("content_block_delta", {
+          type: "content_block_delta",
+          index: contentIndex,
+          delta: { type: "text_delta", text: `[Error] ${evt.error.code}: ${evt.error.message}` },
+        });
+        yield formatSSE("content_block_stop", {
+          type: "content_block_stop",
+          index: contentIndex,
+        });
+        textBlockStarted = false;
+      }
+      yield formatSSE("error", {
+        type: "error",
+        error: { type: "api_error", message: `${evt.error.code}: ${evt.error.message}` },
+      });
+      yield formatSSE("message_stop", { type: "message_stop" });
+      return;
+    }
+
     // Handle function call start → close text block, open tool_use block
     if (evt.functionCallStart) {
       hasToolCalls = true;
@@ -207,6 +230,9 @@ export async function collectCodexToAnthropicResponse(
 
   for await (const evt of iterateCodexEvents(codexApi, rawResponse)) {
     if (evt.responseId) responseId = evt.responseId;
+    if (evt.error) {
+      throw new Error(`Codex API error: ${evt.error.code}: ${evt.error.message}`);
+    }
     if (evt.textDelta) fullText += evt.textDelta;
     if (evt.usage) {
       inputTokens = evt.usage.input_tokens;

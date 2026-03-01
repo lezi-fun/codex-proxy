@@ -70,6 +70,17 @@ export interface CodexFunctionCallArgsDoneEvent {
   name: string;
 }
 
+export interface CodexErrorEvent {
+  type: "error";
+  error: { type: string; code: string; message: string };
+}
+
+export interface CodexResponseFailedEvent {
+  type: "response.failed";
+  error: { type: string; code: string; message: string };
+  response: CodexResponseData;
+}
+
 export interface CodexUnknownEvent {
   type: "unknown";
   raw: unknown;
@@ -84,6 +95,8 @@ export type TypedCodexEvent =
   | CodexOutputItemAddedEvent
   | CodexFunctionCallArgsDeltaEvent
   | CodexFunctionCallArgsDoneEvent
+  | CodexErrorEvent
+  | CodexResponseFailedEvent
   | CodexUnknownEvent;
 
 // ── Type guard / parser ──────────────────────────────────────────
@@ -200,6 +213,39 @@ export function parseCodexEvent(evt: CodexSSEEvent): TypedCodexEvent {
           arguments: data.arguments,
           call_id: doneCallId,
           name: typeof data.name === "string" ? data.name : "",
+        };
+      }
+      return { type: "unknown", raw: data };
+    }
+    case "error": {
+      if (isRecord(data)) {
+        const err = isRecord(data.error) ? data.error : data;
+        return {
+          type: "error",
+          error: {
+            type: typeof err.type === "string" ? err.type : "error",
+            code: typeof err.code === "string" ? err.code : "unknown",
+            message: typeof err.message === "string" ? err.message : JSON.stringify(data),
+          },
+        };
+      }
+      return {
+        type: "error",
+        error: { type: "error", code: "unknown", message: String(data) },
+      };
+    }
+    case "response.failed": {
+      const resp = parseResponseData(data);
+      if (isRecord(data)) {
+        const err = isRecord(data.error) ? data.error : {};
+        return {
+          type: "response.failed",
+          error: {
+            type: typeof err.type === "string" ? err.type : "error",
+            code: typeof err.code === "string" ? err.code : "unknown",
+            message: typeof err.message === "string" ? err.message : JSON.stringify(data),
+          },
+          response: resp ?? {},
         };
       }
       return { type: "unknown", raw: data };

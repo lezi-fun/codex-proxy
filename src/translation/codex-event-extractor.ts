@@ -38,6 +38,7 @@ export interface ExtractedEvent {
   responseId?: string;
   textDelta?: string;
   usage?: UsageInfo;
+  error?: { code: string; message: string };
   functionCallStart?: FunctionCallStart;
   functionCallDelta?: FunctionCallDelta;
   functionCallDone?: FunctionCallDone;
@@ -107,6 +108,15 @@ export async function* iterateCodexEvents(
       case "response.completed":
         if (typed.response.id) extracted.responseId = typed.response.id;
         if (typed.response.usage) extracted.usage = typed.response.usage;
+        break;
+
+      case "error":
+        extracted.error = { code: typed.error.code, message: typed.error.message };
+        break;
+
+      case "response.failed":
+        extracted.error = { code: typed.error.code, message: typed.error.message };
+        if (typed.response.id) extracted.responseId = typed.response.id;
         break;
     }
 

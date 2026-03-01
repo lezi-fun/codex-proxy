@@ -302,6 +302,7 @@ export class CodexApi {
 
     const MAX_SSE_BUFFER = 10 * 1024 * 1024; // 10MB
     let buffer = "";
+    let yieldedAny = false;
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -317,14 +318,40 @@ export class CodexApi {
         for (const part of parts) {
           if (!part.trim()) continue;
           const evt = this.parseSSEBlock(part);
-          if (evt) yield evt;
+          if (evt) {
+            yieldedAny = true;
+            yield evt;
+          }
         }
       }
 
       // Process remaining buffer
       if (buffer.trim()) {
         const evt = this.parseSSEBlock(buffer);
-        if (evt) yield evt;
+        if (evt) {
+          yieldedAny = true;
+          yield evt;
+        }
+      }
+
+      // Non-SSE response detection: if the entire stream yielded no SSE events
+      // but has content, the upstream likely returned a plain JSON error body.
+      if (!yieldedAny && buffer.trim()) {
+        let errorMessage = buffer.trim();
+        try {
+          const parsed = JSON.parse(errorMessage) as Record<string, unknown>;
+          const errObj = typeof parsed.error === "object" && parsed.error !== null
+            ? (parsed.error as Record<string, unknown>)
+            : undefined;
+          errorMessage =
+            (typeof parsed.detail === "string" ? parsed.detail : null)
+            ?? (typeof errObj?.message === "string" ? errObj.message : null)
+            ?? errorMessage;
+        } catch { /* use raw text */ }
+        yield {
+          event: "error",
+          data: { error: { type: "error", code: "non_sse_response", message: errorMessage } },
+        };
       }
     } finally {
       reader.releaseLock();
