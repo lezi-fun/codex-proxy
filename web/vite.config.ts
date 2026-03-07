@@ -22,6 +22,7 @@ export default defineConfig({
       "/auth": "http://localhost:8080",
       "/health": "http://localhost:8080",
       "/debug": "http://localhost:8080",
+      "/admin": "http://localhost:8080",
     },
   },
 });

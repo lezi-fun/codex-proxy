@@ -4,7 +4,9 @@ import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import type { AccountPool } from "../auth/account-pool.js";
 import { getConfig, getFingerprint } from "../config.js";
-import { getPublicDir, getDesktopPublicDir, getConfigDir, getDataDir } from "../paths.js";
+import { getPublicDir, getDesktopPublicDir, getConfigDir, getDataDir, isEmbedded } from "../paths.js";
+import { getUpdateState, checkForUpdate, isUpdateInProgress } from "../update-checker.js";
+import { getProxyInfo, canSelfUpdate, checkProxySelfUpdate, applyProxySelfUpdate, isProxyUpdateInProgress } from "../self-update.js";
 
 export function createWebRoutes(accountPool: AccountPool): Hono {
   const app = new Hono();
@@ -117,6 +119,90 @@ export function createWebRoutes(accountPool: AccountPool): Hono {
       },
       prompts_loaded: prompts,
       update_state: updateState,
+    });
+  });
+
+  // --- Update management endpoints ---
+
+  app.get("/admin/update-status", (c) => {
+    const proxyInfo = getProxyInfo();
+    const codexState = getUpdateState();
+
+    return c.json({
+      proxy: {
+        version: proxyInfo.version,
+        commit: proxyInfo.commit,
+        can_self_update: canSelfUpdate(),
+        commits_behind: null as number | null,
+        update_in_progress: isProxyUpdateInProgress(),
+      },
+      codex: {
+        current_version: codexState?.current_version ?? null,
+        current_build: codexState?.current_build ?? null,
+        latest_version: codexState?.latest_version ?? null,
+        latest_build: codexState?.latest_build ?? null,
+        update_available: codexState?.update_available ?? false,
+        update_in_progress: isUpdateInProgress(),
+        last_check: codexState?.last_check ?? null,
+      },
+    });
+  });
+
+  app.post("/admin/check-update", async (c) => {
+    const results: {
+      proxy?: { commits_behind: number; current_commit: string | null; latest_commit: string | null; update_applied?: boolean; error?: string };
+      codex?: { update_available: boolean; current_version: string; latest_version: string | null; error?: string };
+    } = {};
+
+    // 1. Proxy self-update check
+    if (canSelfUpdate()) {
+      try {
+        const proxyResult = await checkProxySelfUpdate();
+        results.proxy = {
+          commits_behind: proxyResult.commitsBehind,
+          current_commit: proxyResult.currentCommit,
+          latest_commit: proxyResult.latestCommit,
+        };
+
+        // Auto-apply if behind
+        if (proxyResult.commitsBehind > 0 && !isProxyUpdateInProgress()) {
+          const applyResult = await applyProxySelfUpdate();
+          results.proxy.update_applied = applyResult.started;
+          if (applyResult.error) results.proxy.error = applyResult.error;
+        }
+      } catch (err) {
+        results.proxy = {
+          commits_behind: 0,
+          current_commit: null,
+          latest_commit: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    // 2. Codex fingerprint check
+    if (!isEmbedded()) {
+      try {
+        const codexState = await checkForUpdate();
+        results.codex = {
+          update_available: codexState.update_available,
+          current_version: codexState.current_version,
+          latest_version: codexState.latest_version,
+        };
+      } catch (err) {
+        results.codex = {
+          update_available: false,
+          current_version: "unknown",
+          latest_version: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    return c.json({
+      ...results,
+      proxy_update_in_progress: isProxyUpdateInProgress(),
+      codex_update_in_progress: isUpdateInProgress(),
     });
   });
 

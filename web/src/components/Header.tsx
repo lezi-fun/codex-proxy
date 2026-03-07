@@ -15,9 +15,13 @@ const SVG_SUN = (
 
 interface HeaderProps {
   onAddAccount: () => void;
+  onCheckUpdate: () => void;
+  checking: boolean;
+  updateStatusMsg: string | null;
+  updateStatusColor: string;
 }
 
-export function Header({ onAddAccount }: HeaderProps) {
+export function Header({ onAddAccount, onCheckUpdate, checking, updateStatusMsg, updateStatusColor }: HeaderProps) {
   const { lang, toggleLang, t } = useI18n();
   const { isDark, toggle: toggleTheme } = useTheme();
 
@@ -46,6 +50,37 @@ export function Header({ onAddAccount }: HeaderProps) {
                 <span class="col-start-1 row-start-1">{t("serverOnline")}</span>
               </span>
             </div>
+            {/* Star on GitHub */}
+            <a
+              href="https://github.com/icebear0828/codex-proxy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-700/30 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+            >
+              <svg class="size-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+              <span class="text-xs font-semibold">{t("starOnGithub")}</span>
+            </a>
+            {/* Check for Updates */}
+            <button
+              onClick={onCheckUpdate}
+              disabled={checking}
+              class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 dark:border-border-dark text-slate-600 dark:text-text-dim hover:bg-slate-50 dark:hover:bg-border-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg class={`size-3.5 ${checking ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.992 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M20.985 4.356v4.992" />
+              </svg>
+              <span class="text-xs font-semibold">
+                {checking ? t("checkingUpdates") : t("checkForUpdates")}
+              </span>
+            </button>
+            {/* Update status message */}
+            {updateStatusMsg && !checking && (
+              <span class={`hidden sm:inline text-xs font-medium ${updateStatusColor}`}>
+                {updateStatusMsg}
+              </span>
+            )}
             {/* Language Toggle */}
             <button
               onClick={toggleLang}

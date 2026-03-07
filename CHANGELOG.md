@@ -8,6 +8,15 @@
 
 ### Added
 
+- Dashboard GitHub Star 徽章：Header 新增醒目的 ⭐ Star 按钮（amber 药丸样式），点击跳转 GitHub 仓库页面，方便用户收藏和获取更新
+- Dashboard 检查更新功能：Footer 显示 Proxy 版本+commit 和 Codex Desktop 指纹版本，提供"检查更新"按钮同时检查两种更新
+  - Proxy 自更新（CLI 模式）：通过 `git fetch` 检查新提交，自动执行 `git pull + npm install + npm run build`，完成后提示重启
+  - Codex 指纹更新：手动触发现有 appcast 检查，自动应用指纹/模型配置变更
+  - Docker 兼容：指纹可自动更新，代理代码提示手动 `docker compose up -d --build`
+  - Electron 兼容：显示版本信息，更新由桌面应用管理
+- `GET /admin/update-status` 端点：返回 proxy 和 codex 两种更新的当前状态
+- `POST /admin/check-update` 端点：同时触发 proxy 自检 + codex 指纹检查，自动应用可用更新
+- `src/self-update.ts`：Proxy 自更新模块（git 子进程实现，支持检查/拉取/构建）
 - GPT-5.4 + Codex Spark 模型支持：新增 `gpt-5.4`（4 种 effort: minimal/low/medium/high）和 `gpt-5.3-codex-spark`（minimal/low），`codex` 别名更新为 `gpt-5.4`
 - 扩展推理等级：支持 `minimal`、`xhigh` 等新 effort 值，客户端发送的任意 `reasoning_effort` 均透传到后端
 - 模型家族矩阵选择器：Dashboard 模型选择从平面下拉改为家族列表 + 推理等级按钮组，通过 `/v1/models/catalog` 端点获取完整目录

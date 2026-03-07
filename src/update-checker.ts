@@ -206,6 +206,11 @@ export function getUpdateState(): UpdateState | null {
   return _currentState;
 }
 
+/** Whether a full-update pipeline is currently running. */
+export function isUpdateInProgress(): boolean {
+  return _updateInProgress;
+}
+
 function scheduleNextPoll(): void {
   _pollTimer = setTimeout(() => {
     checkForUpdate().catch((err) => {
