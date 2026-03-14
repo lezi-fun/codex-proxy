@@ -283,8 +283,18 @@ export function createWebRoutes(accountPool: AccountPool): Hono {
 
   app.post("/admin/apply-update", async (c) => {
     if (!canSelfUpdate()) {
+      const mode = getDeployMode();
       c.status(400);
-      return c.json({ started: false, error: "Self-update not available in this deploy mode" });
+      return c.json({
+        started: false,
+        error: "Self-update not available in this deploy mode",
+        mode,
+        hint: mode === "docker"
+          ? "Run: docker compose pull && docker compose up -d"
+          : mode === "electron"
+            ? "Updates are handled automatically by the desktop app. Check the system tray for update notifications, or restart the app to trigger a check."
+            : "Git is not available in this environment",
+      });
     }
 
     // SSE stream for progress updates

@@ -180,20 +180,15 @@ export function UpdateModal({
               </button>
             ) : mode === "docker" ? (
               <button
-                onClick={() => { navigator.clipboard.writeText("docker compose up -d --build"); }}
+                onClick={() => { navigator.clipboard.writeText("docker compose pull && docker compose up -d"); }}
                 class="px-4 py-2 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
               >
-                {t("copy")} docker compose up -d --build
+                {t("copy")} docker compose pull && docker compose up -d
               </button>
             ) : (
-              <a
-                href={release?.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="px-4 py-2 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors inline-flex"
-              >
-                {t("downloadUpdate")}
-              </a>
+              <span class="text-xs text-slate-500 dark:text-text-dim italic">
+                {t("electronUpdateHint")}
+              </span>
             )}
           </div>
         )}
