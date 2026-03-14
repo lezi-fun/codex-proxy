@@ -18,8 +18,16 @@ function getInitialDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+// Sync dark class to <html> on initial load (before first render to avoid flash)
+const _initialDark = getInitialDark();
+if (_initialDark) {
+  document.documentElement.classList.add("dark");
+} else {
+  document.documentElement.classList.remove("dark");
+}
+
 export function ThemeProvider({ children }: { children: ComponentChildren }) {
-  const [isDark, setIsDark] = useState(getInitialDark);
+  const [isDark, setIsDark] = useState(_initialDark);
 
   const toggle = useCallback(() => {
     setIsDark((prev) => {
