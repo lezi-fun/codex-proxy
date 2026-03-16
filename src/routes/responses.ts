@@ -304,6 +304,13 @@ export function createResponsesRoutes(
       store: false,
     };
 
+    // Responses API always uses WebSocket transport — enables server-side storage
+    // and previous_response_id for multi-turn conversations.
+    codexRequest.useWebSocket = true;
+    if (typeof body.previous_response_id === "string") {
+      codexRequest.previous_response_id = body.previous_response_id;
+    }
+
     // Reasoning effort: explicit body > suffix > model default > config default
     const effort =
       (isRecord(body.reasoning) && typeof body.reasoning.effort === "string"

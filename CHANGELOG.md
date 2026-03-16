@@ -16,6 +16,7 @@
 
 - 模型列表自动同步：后端动态 fetch 成功后自动回写 `config/models.yaml`，静态配置不再滞后；前端每 60s 轮询模型列表，新模型无需刷新页面即可选择
 - Tuple Schema 支持：`prefixItems`（JSON Schema 2020-12 tuple）自动转换为等价 object schema 发给上游，响应侧还原为数组；OpenAI / Gemini / Responses 三端点统一支持
+- WebSocket 传输 + `previous_response_id` 多轮支持：`/v1/responses` 端点自动通过 WebSocket 连接上游，服务端持久化 response，客户端可通过 `previous_response_id` 引用前轮对话实现增量多轮；WebSocket 失败自动降级回 HTTP SSE (#83)
 
 ### Fixed
 

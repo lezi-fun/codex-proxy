@@ -15,6 +15,7 @@ import {
   buildHeaders,
   buildHeadersWithContentType,
 } from "../fingerprint/manager.js";
+import { createWebSocketResponse, type WsCreateRequest } from "./ws-transport.js";
 import type { CookieJar } from "./cookie-jar.js";
 import type { BackendModelEntry } from "../models/model-store.js";
 
@@ -43,6 +44,10 @@ export interface CodexResponsesRequest {
       strict?: boolean;
     };
   };
+  /** Optional: reference a previous response for multi-turn (WebSocket only). */
+  previous_response_id?: string;
+  /** When true, use WebSocket transport (enables previous_response_id and server-side storage). */
+  useWebSocket?: boolean;
 }
 
 /** Structured content part for multimodal Codex input. */
@@ -244,9 +249,69 @@ export class CodexApi {
 
   /**
    * Create a response (streaming).
-   * Returns the raw Response so the caller can process the SSE stream.
+   * Routes to WebSocket when previous_response_id is present (HTTP SSE doesn't support it).
+   * Falls back to HTTP SSE if WebSocket fails.
    */
   async createResponse(
+    request: CodexResponsesRequest,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    if (request.useWebSocket) {
+      try {
+        return await this.createResponseViaWebSocket(request, signal);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[CodexApi] WebSocket failed (${msg}), falling back to HTTP SSE`);
+        // Fallback: strip previous_response_id and use HTTP
+        const { previous_response_id: _, useWebSocket: _ws, ...httpRequest } = request;
+        return this.createResponseViaHttp(httpRequest as CodexResponsesRequest, signal);
+      }
+    }
+    return this.createResponseViaHttp(request, signal);
+  }
+
+  /**
+   * Create a response via WebSocket (for previous_response_id support).
+   * Returns a Response with SSE-formatted body, compatible with parseStream().
+   */
+  private async createResponseViaWebSocket(
+    request: CodexResponsesRequest,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const config = getConfig();
+    const baseUrl = config.api.base_url;
+    const wsUrl = baseUrl.replace(/^https?:/, "wss:") + "/codex/responses";
+
+    // Build headers — same auth but no Content-Type (WebSocket upgrade)
+    const headers = this.applyHeaders(
+      buildHeaders(this.token, this.accountId),
+    );
+    headers["OpenAI-Beta"] = "responses_websockets=2026-02-06";
+    headers["x-openai-internal-codex-residency"] = "us";
+
+    // Build flat WebSocket message — omit store, stream, service_tier
+    const wsRequest: WsCreateRequest = {
+      type: "response.create",
+      model: request.model,
+      instructions: request.instructions,
+      input: request.input,
+    };
+    if (request.previous_response_id) {
+      wsRequest.previous_response_id = request.previous_response_id;
+    }
+    if (request.reasoning) wsRequest.reasoning = request.reasoning;
+    if (request.tools?.length) wsRequest.tools = request.tools;
+    if (request.tool_choice) wsRequest.tool_choice = request.tool_choice;
+    if (request.text) wsRequest.text = request.text;
+
+    return createWebSocketResponse(wsUrl, headers, wsRequest, signal, this.proxyUrl);
+  }
+
+  /**
+   * Create a response via HTTP SSE (default transport).
+   * Uses curl-impersonate for TLS fingerprinting.
+   */
+  private async createResponseViaHttp(
     request: CodexResponsesRequest,
     signal?: AbortSignal,
   ): Promise<Response> {
@@ -262,10 +327,9 @@ export class CodexApi {
     // Codex Desktop sends this beta header to enable newer API features
     headers["OpenAI-Beta"] = "responses_websockets=2026-02-06";
 
-    // Strip service_tier from body — Codex backend doesn't accept it as a body field.
-    // Desktop app handles Fast mode internally (lighter reasoning), not via the API.
-    const { service_tier: _st, ...bodyWithoutServiceTier } = request;
-    const body = JSON.stringify(bodyWithoutServiceTier);
+    // Strip non-API fields from body — not supported by HTTP SSE.
+    const { service_tier: _st, previous_response_id: _pid, useWebSocket: _ws, ...bodyFields } = request;
+    const body = JSON.stringify(bodyFields);
 
     // No wall-clock timeout for streaming SSE — header timeout + AbortSignal provide protection
     let transportRes;
