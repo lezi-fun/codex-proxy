@@ -27,10 +27,6 @@ jobs:
             platform: mac
             arch: arm64
             artifact: macos-arm64
-          - os: macos-latest
-            platform: mac
-            arch: x64
-            artifact: macos-x64
           - os: ubuntu-latest
             platform: linux
             artifact: linux
@@ -77,14 +73,99 @@ jobs:
         working-directory: packages/electron
         run: node electron/prepare-pack.mjs
 
+      - name: Clean stale release assets
+        continue-on-error: true
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          ASSETS=$(gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null || echo "")
+          [ -z "$ASSETS" ] && exit 0
+
+          case "${{ matrix.platform }}" in
+            mac) PATTERN="${{ matrix.arch }}" ;;
+            win) PATTERN="(Setup|\.exe|\.nsis|win)" ;;
+            linux) PATTERN="(AppImage|linux)" ;;
+          esac
+
+          echo "$ASSETS" | grep -iE "$PATTERN" | while read -r name; do
+            echo "Removing stale asset: $name"
+            gh release delete-asset "$TAG" "$name" -y 2>/dev/null || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pack (${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }})
         working-directory: packages/electron
         run: npx electron-builder --config electron-builder.yml --${{ matrix.platform }} ${{ matrix.arch && format('--{0}', matrix.arch) || '' }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  release:
+  # macOS x64 runs AFTER arm64 to avoid release asset upload collisions
+  # (shared files like latest-mac.yml don't include arch in the name)
+  build-mac-x64:
     needs: build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install all workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Setup curl-impersonate
+        run: npx tsx scripts/setup-curl.ts --arch x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install web frontend dependencies
+        run: cd web && npm ci
+
+      - name: Install desktop frontend dependencies
+        run: cd packages/electron/desktop && npm ci
+
+      - name: Build core (web + tsc)
+        run: npm run build
+
+      - name: Build desktop frontend
+        run: cd packages/electron/desktop && npx vite build
+
+      - name: Bundle Electron (esbuild)
+        working-directory: packages/electron
+        run: node electron/build.mjs
+
+      - name: Prepare pack (copy root resources)
+        working-directory: packages/electron
+        run: node electron/prepare-pack.mjs
+
+      - name: Clean stale release assets
+        continue-on-error: true
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          ASSETS=$(gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null || echo "")
+          [ -z "$ASSETS" ] && exit 0
+          echo "$ASSETS" | grep -iE "x64" | while read -r name; do
+            echo "Removing stale asset: $name"
+            gh release delete-asset "$TAG" "$name" -y 2>/dev/null || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack (mac-x64)
+        working-directory: packages/electron
+        run: npx electron-builder --config electron-builder.yml --mac --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    needs: [build, build-mac-x64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || inputs.tag
 
