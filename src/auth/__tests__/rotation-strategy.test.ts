@@ -10,6 +10,7 @@ function makeEntry(id: string, overrides?: Partial<AccountEntry["usage"]>): Acco
     refreshToken: null,
     email: `${id}@test.com`,
     accountId: `acct-${id}`,
+    userId: `user-${id}`,
     planType: "free",
     proxyApiKey: `key-${id}`,
     status: "active",
