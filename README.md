@@ -465,6 +465,7 @@ server:
 <!-- CHANGELOG:START -->
 ### [Unreleased]
 
+- Dashboard 登录门（#141）：当 `proxy_api_key` 已配置且请求来自非 localhost 时，需输入密码才能访问控制台
 - 账号封禁检测：上游返回非 Cloudflare 的 403 时自动标记为 `banned` 状态
 - 上游 401 token 吊销（"token has been invalidated"）自动标记过期并切换下一个账号
 - Usage Stats 页面（`#/usage-stats`）：累计 token 用量汇总 + 时间趋势图
