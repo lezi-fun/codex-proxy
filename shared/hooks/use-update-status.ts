@@ -8,6 +8,7 @@ export interface UpdateStatus {
     mode: "git" | "docker" | "electron";
     commits_behind: number | null;
     commits: { hash: string; message: string }[];
+    changelog: string | null;
     release: { version: string; body: string; url: string } | null;
     update_available: boolean;
     update_in_progress: boolean;
@@ -29,6 +30,7 @@ export interface CheckResult {
     current_commit: string | null;
     latest_commit: string | null;
     commits: { hash: string; message: string }[];
+    changelog: string | null;
     release: { version: string; body: string; url: string } | null;
     update_available: boolean;
     mode: "git" | "docker" | "electron";

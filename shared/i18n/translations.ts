@@ -258,6 +258,8 @@ export const translations = {
     showMore: "Show More",
     showAll: "Show All",
     collapse: "Collapse",
+    refreshAllQuota: "Refresh All Quota",
+    refreshQuota: "Refresh Quota",
   },
   zh: {
     serverOnline: "\u670d\u52a1\u8fd0\u884c\u4e2d",
@@ -521,6 +523,8 @@ export const translations = {
     showMore: "显示更多",
     showAll: "显示全部",
     collapse: "收起",
+    refreshAllQuota: "刷新全部配额",
+    refreshQuota: "刷新配额",
   },
 } as const;
 

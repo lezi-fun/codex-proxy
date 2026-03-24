@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 import yaml from "js-yaml";
 import { z } from "zod";
@@ -114,6 +114,15 @@ function loadMergedConfig(configDir?: string): Record<string, unknown> {
   // otherwise use the standard data directory.
   const dataDir = configDir ? resolve(configDir, "..", "data") : getDataDir();
   const localPath = resolve(dataDir, "local.yaml");
+  if (!existsSync(localPath)) {
+    try {
+      mkdirSync(dataDir, { recursive: true });
+      writeFileSync(localPath, "server:\n  proxy_api_key: pwd\n", "utf-8");
+      console.log("[Config] Created data/local.yaml with default proxy_api_key");
+    } catch (err) {
+      console.warn(`[Config] Failed to create data/local.yaml: ${err instanceof Error ? err.message : err}`);
+    }
+  }
   if (existsSync(localPath)) {
     try {
       const local = loadYaml(localPath) as Record<string, unknown> | null;

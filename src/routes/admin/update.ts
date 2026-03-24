@@ -20,6 +20,7 @@ export function createUpdateRoutes(): Hono {
         mode: getDeployMode(),
         commits_behind: cached?.commitsBehind ?? null,
         commits: cached?.commits ?? [],
+        changelog: cached?.changelog ?? null,
         release: cached?.release ? { version: cached.release.version, body: cached.release.body, url: cached.release.url } : null,
         update_available: cached?.updateAvailable ?? false,
         update_in_progress: isProxyUpdateInProgress(),
@@ -43,6 +44,7 @@ export function createUpdateRoutes(): Hono {
         current_commit: string | null;
         latest_commit: string | null;
         commits: Array<{ hash: string; message: string }>;
+        changelog: string | null;
         release: { version: string; body: string; url: string } | null;
         update_available: boolean;
         mode: string;
@@ -58,6 +60,7 @@ export function createUpdateRoutes(): Hono {
         current_commit: proxyResult.currentCommit,
         latest_commit: proxyResult.latestCommit,
         commits: proxyResult.commits,
+        changelog: proxyResult.changelog,
         release: proxyResult.release ? { version: proxyResult.release.version, body: proxyResult.release.body, url: proxyResult.release.url } : null,
         update_available: proxyResult.updateAvailable,
         mode: proxyResult.mode,
@@ -68,6 +71,7 @@ export function createUpdateRoutes(): Hono {
         current_commit: null,
         latest_commit: null,
         commits: [],
+        changelog: null,
         release: null,
         update_available: false,
         mode: getDeployMode(),

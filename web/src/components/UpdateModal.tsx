@@ -15,6 +15,7 @@ interface UpdateModalProps {
   onClose: () => void;
   mode: "git" | "docker" | "electron";
   commits: { hash: string; message: string }[];
+  changelog: string | null;
   release: { version: string; body: string; url: string } | null;
   onApply: () => void;
   applying: boolean;
@@ -28,6 +29,7 @@ export function UpdateModal({
   onClose,
   mode,
   commits,
+  changelog,
   release,
   onApply,
   applying,
@@ -135,14 +137,20 @@ export function UpdateModal({
               </span>
             </div>
           ) : mode === "git" ? (
-            <ul class="space-y-1 text-sm text-slate-600 dark:text-text-dim max-h-64 overflow-y-auto">
-              {commits.map((c) => (
-                <li key={c.hash} class="flex gap-2 py-0.5">
-                  <code class="text-primary/70 text-xs shrink-0 pt-0.5">{c.hash}</code>
-                  <span class="text-xs">{c.message}</span>
-                </li>
-              ))}
-            </ul>
+            changelog ? (
+              <pre class="text-xs text-slate-600 dark:text-text-dim whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
+                {changelog}
+              </pre>
+            ) : (
+              <ul class="space-y-1 text-sm text-slate-600 dark:text-text-dim max-h-64 overflow-y-auto">
+                {commits.map((c) => (
+                  <li key={c.hash} class="flex gap-2 py-0.5">
+                    <code class="text-primary/70 text-xs shrink-0 pt-0.5">{c.hash}</code>
+                    <span class="text-xs">{c.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : (
             <>
               {release && (

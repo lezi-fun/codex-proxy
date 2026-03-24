@@ -14,7 +14,7 @@
 - 配额自动刷新默认关闭（`refresh_interval_minutes: 0`），用户在 Dashboard 自行设置
 - 配额刷新改为有限并发（默认 10，可配 `quota.concurrency`），不再全量并发
 - Token 刷新走账号分配的代理，永久错误需连续 2 次才标 expired
-- `proxy_api_key` 默认值从 `pwd` 改为 `null`（自动生成）
+- **⚠️ 密钥变更**：首次启动自动创建 `data/local.yaml` 并设置默认密钥 `pwd`。所有自定义配置请通过 Dashboard 修改（自动保存到 `data/local.yaml`，更新不覆盖）
 - `suppress_desktop_directives` 默认值改为 `false`
 
 ### Added

@@ -36,6 +36,9 @@ EXPOSE 8080
 # Ensure data dir exists in the image (bind mount may override at runtime)
 RUN mkdir -p /app/data
 
+# Backup default configs so entrypoint can seed empty bind mounts
+RUN cp -r /app/config /defaults
+
 COPY docker-entrypoint.sh /
 COPY docker-healthcheck.sh /
 RUN chmod +x /docker-entrypoint.sh /docker-healthcheck.sh

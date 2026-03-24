@@ -71,6 +71,7 @@ function useUpdateMessage() {
     ? {
         mode: update.status!.proxy.mode,
         commits: update.status!.proxy.commits,
+        changelog: update.status!.proxy.changelog ?? null,
         release: update.status!.proxy.release,
       }
     : null;
@@ -175,6 +176,7 @@ function Dashboard() {
           onClose={() => setShowModal(false)}
           mode={update.proxyUpdateInfo.mode}
           commits={update.proxyUpdateInfo.commits}
+          changelog={update.proxyUpdateInfo.changelog}
           release={update.proxyUpdateInfo.release}
           onApply={update.applyUpdate}
           applying={update.applying}

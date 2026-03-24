@@ -1,4 +1,4 @@
-import { useCallback } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import { useT, useI18n } from "../../../shared/i18n/context";
 import type { TranslationKey } from "../../../shared/i18n/translations";
 import { formatNumber, formatResetTime, formatWindowDuration } from "../../../shared/utils/format";
@@ -47,9 +47,10 @@ interface AccountCardProps {
   onProxyChange?: (accountId: string, proxyId: string) => void;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
+  onRefreshQuota?: (id: string) => Promise<void>;
 }
 
-export function AccountCard({ account, index, onDelete, proxies, onProxyChange, selected, onToggleSelect }: AccountCardProps) {
+export function AccountCard({ account, index, onDelete, proxies, onProxyChange, selected, onToggleSelect, onRefreshQuota }: AccountCardProps) {
   const t = useT();
   const { lang } = useI18n();
   const email = account.email || "Unknown";
@@ -105,6 +106,18 @@ export function AccountCard({ account, index, onDelete, proxies, onProxyChange, 
   const sWindowSec = srl?.limit_window_seconds;
   const sWindowDur = sWindowSec ? formatWindowDuration(sWindowSec, lang === "zh") : null;
 
+  const [quotaRefreshing, setQuotaRefreshing] = useState(false);
+
+  const handleRefreshQuota = useCallback(async () => {
+    if (!onRefreshQuota) return;
+    setQuotaRefreshing(true);
+    try {
+      await onRefreshQuota(account.id);
+    } finally {
+      setQuotaRefreshing(false);
+    }
+  }, [account.id, onRefreshQuota]);
+
   const handleToggle = useCallback(() => {
     onToggleSelect?.(account.id);
   }, [account.id, onToggleSelect]);
@@ -141,6 +154,18 @@ export function AccountCard({ account, index, onDelete, proxies, onProxyChange, 
           <span class={`px-2.5 py-1 rounded-full ${statusCls} text-xs font-medium border`}>
             {t(statusKey as TranslationKey)}
           </span>
+          {onRefreshQuota && (
+            <button
+              onClick={handleRefreshQuota}
+              disabled={quotaRefreshing}
+              class="p-1.5 text-slate-400 dark:text-text-dim hover:text-amber-500 transition-colors rounded-md hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-40"
+              title={t("refreshQuota")}
+            >
+              <svg class={`size-[16px] ${quotaRefreshing ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={handleDelete}
             class="p-1.5 text-slate-400 dark:text-text-dim hover:text-red-500 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
