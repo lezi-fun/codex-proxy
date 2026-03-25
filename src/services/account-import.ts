@@ -109,16 +109,6 @@ export class AccountImportService {
     const entryId = this.pool.addAccount(resolved.token, resolved.rt);
     this.scheduler.scheduleOne(entryId, resolved.token);
 
-    // Warmup: establish session cookies to avoid cold-start detection
-    if (this.deps.warmup) {
-      const accountId = extractChatGptAccountId(resolved.token);
-      try {
-        await this.deps.warmup(entryId, resolved.token, accountId);
-      } catch (err) {
-        console.warn(`[Import] Warmup failed for ${entryId}: ${err instanceof Error ? err.message : err}`);
-      }
-    }
-
     const account = this.pool.getAccounts().find((a) => a.id === entryId);
     if (!account) {
       return { ok: false, error: "Failed to add account", kind: "validation" };
