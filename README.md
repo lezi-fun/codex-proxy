@@ -503,6 +503,8 @@ server:
 - `scripts/` 按用途分类到 `infra/`、`build/`、`poc/`、`manual-test/` 子目录
 - 新增 `src/context.ts`（AppContext 容器），fingerprint/manager、codex-api、codex-usage、codex-models 支持可选 DI 参数（fallback 到全局单例）
 - `ModelStore` 从模块级单例重构为 class，自由函数 wrapper 保持后向兼容，新增 `getModelStore()` / `setModelStoreForTesting()`
+- Transport 加入 AppContext，codex-api/codex-usage/codex-models/proxy-pool/curl-fetch 支持可选 transport 注入
+- ...（[查看全部](./CHANGELOG.md)）
 **Fixed**
 - 导入/导出按钮图标反了——导入改为下箭头、导出改为上箭头（#191）
 - Windows 桌面端按钮溢出——Electron 最小宽度从 680px 提高到 800px，覆盖 Tailwind md: 断点（#192）
