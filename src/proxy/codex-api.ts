@@ -6,7 +6,7 @@
  * It requires: instructions, store: false, stream: true.
  *
  * All upstream requests go through the TLS transport layer
- * (curl CLI or libcurl FFI) to avoid Cloudflare TLS fingerprinting.
+ * (native rustls, curl CLI, or libcurl FFI).
  */
 
 import { getConfig } from "../config.js";
@@ -196,6 +196,8 @@ export class CodexApi {
     );
     headers["OpenAI-Beta"] = "responses_websockets=2026-02-06";
     headers["x-openai-internal-codex-residency"] = "us";
+    headers["x-client-request-id"] = crypto.randomUUID();
+    if (request.turnState) headers["x-codex-turn-state"] = request.turnState;
 
     const wsRequest: WsCreateRequest = {
       type: "response.create",
@@ -219,7 +221,6 @@ export class CodexApi {
 
   /**
    * Create a response via HTTP SSE (default transport).
-   * Uses curl-impersonate for TLS fingerprinting.
    * No wall-clock timeout — header timeout + AbortSignal provide protection.
    */
   private async createResponseViaHttp(
@@ -235,8 +236,11 @@ export class CodexApi {
     );
     headers["Accept"] = "text/event-stream";
     headers["OpenAI-Beta"] = "responses_websockets=2026-02-06";
+    headers["x-openai-internal-codex-residency"] = "us";
+    headers["x-client-request-id"] = crypto.randomUUID();
+    if (request.turnState) headers["x-codex-turn-state"] = request.turnState;
 
-    const { previous_response_id: _pid, useWebSocket: _ws, ...bodyFields } = request;
+    const { previous_response_id: _pid, useWebSocket: _ws, turnState: _ts, ...bodyFields } = request;
     const body = JSON.stringify(bodyFields);
 
     let transportRes;

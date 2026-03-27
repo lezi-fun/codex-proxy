@@ -8,6 +8,8 @@
 
 ### Added
 
+- 加强伪装：Rust native transport（reqwest + rustls），TLS 指纹精确匹配真实 Codex Desktop；补齐 `x-openai-internal-codex-residency`、`x-client-request-id`、`x-codex-turn-state` 请求头
+- 账号探活：`POST /auth/accounts/health-check` 批量健康检查 + `POST /auth/accounts/:id/refresh` 单账号刷新，通过 OAuth refresh 探测存活状态，带 stagger 延迟和并发控制
 - Session affinity：同一对话链路由到同一账号，修复 `previous_response_id` 跨账号失效问题
 - `prompt_cache_key`：每个对话链生成唯一 UUID 传递给后端，启用 prompt cache
 - WebSocket 请求新增 `include: ["reasoning.encrypted_content"]`（reasoning 开启时自动设置）

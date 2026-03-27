@@ -10,6 +10,7 @@
 interface AffinityEntry {
   entryId: string;
   conversationId: string;
+  turnState?: string;
   createdAt: number;
 }
 
@@ -27,8 +28,8 @@ export class SessionAffinityMap {
   }
 
   /** Record that a response was created by a specific account in a conversation. */
-  record(responseId: string, entryId: string, conversationId: string): void {
-    this.map.set(responseId, { entryId, conversationId, createdAt: Date.now() });
+  record(responseId: string, entryId: string, conversationId: string, turnState?: string): void {
+    this.map.set(responseId, { entryId, conversationId, turnState, createdAt: Date.now() });
   }
 
   /** Look up which account created a given response. */
@@ -41,6 +42,12 @@ export class SessionAffinityMap {
   lookupConversationId(responseId: string): string | null {
     const entry = this.getEntry(responseId);
     return entry?.conversationId ?? null;
+  }
+
+  /** Look up the upstream turn-state token for a given response. */
+  lookupTurnState(responseId: string): string | null {
+    const entry = this.getEntry(responseId);
+    return entry?.turnState ?? null;
   }
 
   private getEntry(responseId: string): AffinityEntry | null {

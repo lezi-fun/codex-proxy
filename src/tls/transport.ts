@@ -68,7 +68,7 @@ export interface TlsTransport {
 }
 
 let _transport: TlsTransport | null = null;
-let _transportType: "libcurl-ffi" | "curl-cli" | "none" = "none";
+let _transportType: "native" | "libcurl-ffi" | "curl-cli" | "none" = "none";
 let _ffiError: string | null = null;
 
 /**
@@ -81,6 +81,23 @@ export async function initTransport(): Promise<TlsTransport> {
   const { getConfig } = await import("../config.js");
   const config = getConfig();
   const setting = config.tls.transport ?? "auto";
+
+  // Native transport (Rust reqwest + rustls) — preferred for matching Codex Desktop TLS
+  if (setting === "native" || (setting === "auto" && shouldUseNative())) {
+    try {
+      const { createNativeTransport } = await import("./native-transport.js");
+      _transport = await createNativeTransport();
+      _transportType = "native";
+      console.log("[TLS] Using native (rustls) transport");
+      return _transport;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (setting === "native") {
+        throw new Error(`Failed to initialize native transport: ${msg}`);
+      }
+      console.warn(`[TLS] Native transport unavailable (${msg}), trying FFI fallback`);
+    }
+  }
 
   if (setting === "libcurl-ffi" || (setting === "auto" && shouldUseFfi())) {
     try {
@@ -115,6 +132,15 @@ export function getTransport(): TlsTransport {
 }
 
 /**
+ * Determine if native (Rust) transport should be used in "auto" mode.
+ * Checks if the napi-rs loader + platform-specific .node file exist.
+ */
+function shouldUseNative(): boolean {
+  const nativeDir = resolve(getBinDir(), "..", "native");
+  return existsSync(resolve(nativeDir, "index.js"));
+}
+
+/**
  * Determine if FFI transport should be used in "auto" mode.
  * FFI is preferred for connection pooling (TCP + TLS session reuse).
  * Enabled on Windows (no CLI available) and macOS/Linux (when dylib/so present).
@@ -136,7 +162,7 @@ function shouldUseFfi(): boolean {
 
 /** Get transport diagnostic info. */
 export function getTransportInfo(): {
-  type: "libcurl-ffi" | "curl-cli" | "none";
+  type: "native" | "libcurl-ffi" | "curl-cli" | "none";
   initialized: boolean;
   impersonate: boolean;
   ffi_error: string | null;

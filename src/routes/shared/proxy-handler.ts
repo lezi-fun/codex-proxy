@@ -105,6 +105,10 @@ export async function handleProxyRequest(
     ?? crypto.randomUUID();
   req.codexRequest.prompt_cache_key = conversationId;
 
+  // Turn state: sticky routing token from upstream, echoed back on subsequent requests
+  const prevTurnState = prevRespId ? affinityMap.lookupTurnState(prevRespId) : null;
+  if (prevTurnState) req.codexRequest.turnState = prevTurnState;
+
   // Set include for reasoning-enabled requests (matches Codex CLI behavior)
   if (req.codexRequest.reasoning && !req.codexRequest.include?.length) {
     req.codexRequest.include = ["reasoning.encrypted_content"];
@@ -154,6 +158,9 @@ export async function handleProxyRequest(
         { tag: fmt.tag },
       );
 
+      // Capture upstream turn-state for sticky routing
+      const upstreamTurnState = rawResponse.headers.get("x-codex-turn-state") ?? undefined;
+
       // Extract rate-limit quota from upstream response headers (passive collection)
       const rl = parseRateLimitHeaders(rawResponse.headers);
       if (rl) {
@@ -187,7 +194,7 @@ export async function handleProxyRequest(
           } finally {
             abortController.abort();
             if (capturedResponseId) {
-              affinityMap.record(capturedResponseId, capturedEntryId, conversationId);
+              affinityMap.record(capturedResponseId, capturedEntryId, conversationId, upstreamTurnState);
             }
             if (usageInfo) {
               console.log(
@@ -204,7 +211,7 @@ export async function handleProxyRequest(
       // ── Non-streaming path (with empty-response retry) ──
       return await handleNonStreaming(
         c, accountPool, cookieJar, req, fmt, proxyPool,
-        codexApi, rawResponse, entryId, abortController, released, affinityMap, conversationId,
+        codexApi, rawResponse, entryId, abortController, released, affinityMap, conversationId, upstreamTurnState,
       );
     } catch (err) {
       if (!(err instanceof CodexApiError)) {
@@ -263,6 +270,7 @@ async function handleNonStreaming(
   released: Set<string>,
   affinityMap?: SessionAffinityMap,
   conversationId?: string,
+  turnState?: string,
 ): Promise<Response> {
   let currentEntryId = initialEntryId;
   let currentApi = initialApi;
@@ -274,7 +282,7 @@ async function handleNonStreaming(
         currentApi, currentRawResponse, req.model, req.tupleSchema,
       );
       if (result.responseId && affinityMap && conversationId) {
-        affinityMap.record(result.responseId, currentEntryId, conversationId);
+        affinityMap.record(result.responseId, currentEntryId, conversationId, turnState);
       }
       releaseAccount(accountPool, currentEntryId, result.usage, released);
       return c.json(result.response);

@@ -99,7 +99,7 @@ npm run dev                        # 开发模式（热重载）
 # 或: npm run build && npm start   # 生产模式
 ```
 
-> macOS / Linux 安装时自动下载 curl-impersonate（Chrome TLS 伪装）。Windows 下不可用，自动降级为系统 curl。
+> 源码运行需 Rust 工具链（`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`），首次安装后执行 `cd native && npm install && npm run build` 编译 TLS addon。
 
 打开 `http://localhost:8080` 登录。
 
@@ -139,8 +139,8 @@ curl http://localhost:8080/v1/chat/completions \
 - **不可达自动标记** — 代理不可达时自动排除
 
 ### 🛡️ 反检测与协议伪装
-- **Chrome TLS 指纹** — curl-impersonate 复刻完整 Chrome TLS 握手
-- **Desktop 请求头** — `originator`、`User-Agent`、`sec-ch-*` 等头按 Codex Desktop 顺序发送
+- **Rust Native TLS** — 内置 reqwest + rustls native addon，TLS 指纹与真实 Codex Desktop 精确一致（依赖版本锁定）
+- **完整请求头** — `originator`、`User-Agent`、`x-openai-internal-codex-residency`、`x-codex-turn-state`、`x-client-request-id` 等头按真实客户端行为发送
 - **Cookie 持久化** — 自动捕获和回放 Cloudflare Cookie
 - **指纹自动更新** — 轮询 Codex Desktop 更新源，自动同步 `app_version` 和 `build_number`
 
@@ -160,7 +160,7 @@ curl http://localhost:8080/v1/chat/completions \
 │       ▼                                                  │
 │  ┌──────────┐    ┌───────────────┐    ┌──────────────┐   │
 │  │  Routes   │──▶│  Translation  │──▶│    Proxy     │   │
-│  │  (Hono)  │   │ Multi→Codex   │   │ curl TLS/FFI │   │
+│  │  (Hono)  │   │ Multi→Codex   │   │ Native TLS   │   │
 │  └──────────┘   └───────────────┘   └──────┬───────┘   │
 │       ▲                                     │           │
 │       │          ┌───────────────┐          │           │
@@ -170,14 +170,15 @@ curl http://localhost:8080/v1/chat/completions \
 │                                                          │
 │  ┌──────────┐  ┌───────────────┐  ┌──────────────────┐  │
 │  │   Auth   │  │  Fingerprint  │  │   Model Store    │  │
-│  │ OAuth/JWT│  │Chrome TLS/UA  │  │ Static + Dynamic │  │
-│  │  Relay   │  │   Cookie      │  │  Plan Routing    │  │
+│  │ OAuth/JWT│  │ Rust (rustls) │  │ Static + Dynamic │  │
+│  │  Relay   │  │  Headers/UA   │  │  Plan Routing    │  │
 │  └──────────┘  └───────────────┘  └──────────────────┘  │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
                           │
-                  curl-impersonate / FFI
-                    (Chrome TLS 指纹)
+                Rust Native Addon (napi-rs)
+              reqwest 0.12.28 + rustls 0.23.36
+             (TLS 指纹 = 真实 Codex Desktop)
                           │
                    ┌──────┴──────┐
                    ▼             ▼
@@ -374,7 +375,7 @@ for await (const chunk of stream) {
 | `client` | `app_version`, `build_number`, `chromium_version` | 模拟的 Codex Desktop 版本 |
 | `model` | `default`, `default_reasoning_effort`, `inject_desktop_context` | 默认模型与推理配置 |
 | `auth` | `rotation_strategy`, `rate_limit_backoff_seconds` | 轮换策略与限流退避 |
-| `tls` | `curl_binary`, `impersonate_profile`, `proxy_url`, `force_http11` | TLS 伪装与代理 |
+| `tls` | `transport`, `proxy_url`, `force_http11` | TLS transport 与代理 |
 | `quota` | `refresh_interval_minutes`, `warning_thresholds`, `skip_exhausted` | 额度刷新与预警 |
 | `session` | `ttl_minutes`, `cleanup_interval_minutes` | Dashboard session 管理 |
 
@@ -401,11 +402,12 @@ Electron 桌面版的 `data/local.yaml` 路径：
 
 ```yaml
 tls:
-  curl_binary: auto                # auto 自动检测 curl-impersonate
-  impersonate_profile: chrome144   # Chrome 伪装版本
+  transport: native                # native = Rust rustls（推荐）；auto / curl-cli / libcurl-ffi 可选
   proxy_url: null                  # null = 自动检测本地代理
   force_http11: false              # HTTP/2 失败时自动降级 HTTP/1.1；true = 强制 HTTP/1.1
 ```
+
+> `native` transport 使用内置 Rust addon（reqwest + rustls），TLS 指纹与真实 Codex Desktop 完全一致。源码运行需先编译：`cd native && npm install && npm run build`。
 
 ### API 密钥
 
@@ -476,7 +478,7 @@ server:
 ## 📋 系统要求
 
 - **Node.js** 18+（推荐 20+）
-- **curl** — 系统自带即可；`npm install` 自动下载 curl-impersonate
+- **Rust** — 源码运行需 Rust 工具链（编译 TLS native addon）；Docker / 桌面应用已内置
 - **ChatGPT 账号** — 免费账号即可
 - **Docker**（可选）
 
@@ -484,7 +486,7 @@ server:
 
 - Codex API 为**流式输出专用**，`stream: false` 时代理内部流式收集后返回完整 JSON
 - 本项目依赖 Codex Desktop 的公开接口，上游版本更新时会自动检测并更新指纹
-- Windows 下 curl-impersonate 不可用，自动降级为系统 curl，建议搭配本地代理或改用 Docker
+- Windows 下 native TLS addon 需 Rust 工具链编译；Docker 部署已预编译，无需额外配置
 
 ## 📝 最近更新
 
@@ -542,5 +544,5 @@ server:
 ---
 
 <div align="center">
-  <sub>Built with Hono + TypeScript | Powered by Codex Desktop API</sub>
+  <sub>Built with Hono + TypeScript + Rust | Powered by Codex Desktop API</sub>
 </div>

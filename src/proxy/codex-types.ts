@@ -34,6 +34,8 @@ export interface CodexResponsesRequest {
   include?: string[];
   /** When true, use WebSocket transport (enables previous_response_id and server-side storage). */
   useWebSocket?: boolean;
+  /** Upstream turn-state token for sticky routing (not serialized to body). */
+  turnState?: string;
 }
 
 /** Structured content part for multimodal Codex input. */
