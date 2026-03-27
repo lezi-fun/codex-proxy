@@ -96,14 +96,14 @@ export class NativeTransport implements TlsTransport {
       },
     });
 
-    const onChunk = (chunk: Buffer | null): void => {
+    const onChunk = (chunk: Buffer | null | undefined): void => {
       if (!streamController) return;
-      if (chunk === null) {
-        // End of stream
+      if (chunk == null) {
         try { streamController.close(); } catch { /* already closed */ }
         streamController = null;
       } else {
-        try { streamController.enqueue(new Uint8Array(chunk)); } catch { /* closed */ }
+        // Buffer extends Uint8Array — enqueue directly without copying
+        try { streamController.enqueue(chunk); } catch { /* closed */ }
       }
     };
 

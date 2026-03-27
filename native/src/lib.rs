@@ -3,26 +3,35 @@ use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFun
 use napi_derive::napi;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-/// Global tokio runtime — shared across all calls.
 fn runtime() -> &'static tokio::runtime::Runtime {
     static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
     RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
-            .worker_threads(2)
+            .worker_threads(4)
             .build()
             .expect("Failed to create tokio runtime")
     })
 }
 
-/// Build a reqwest Client with optional proxy.
-fn build_client(proxy_url: Option<&str>) -> Result<reqwest::Client> {
+/// Cached reqwest clients keyed by proxy URL for connection pooling + TLS session reuse.
+fn get_client(proxy_url: Option<&str>) -> Result<reqwest::Client> {
+    static CLIENTS: OnceLock<Mutex<HashMap<Option<String>, reqwest::Client>>> = OnceLock::new();
+    let cache = CLIENTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let key = proxy_url.map(String::from);
+
+    let guard = cache.lock().map_err(|e| Error::from_reason(format!("Client cache lock poisoned: {e}")))?;
+    if let Some(client) = guard.get(&key) {
+        return Ok(client.clone()); // Arc clone, not deep copy
+    }
+    drop(guard);
+
+    // Build new client outside lock
     let mut builder = reqwest::Client::builder()
         .use_rustls_tls()
-        .http2_prior_knowledge() // prefer H2 like real codex-rs
         .pool_max_idle_per_host(4)
         .tcp_keepalive(Duration::from_secs(30));
 
@@ -34,12 +43,15 @@ fn build_client(proxy_url: Option<&str>) -> Result<reqwest::Client> {
         }
     }
 
-    builder
+    let client = builder
         .build()
-        .map_err(|e| Error::from_reason(format!("Failed to build HTTP client: {e}")))
+        .map_err(|e| Error::from_reason(format!("Failed to build HTTP client: {e}")))?;
+
+    let mut guard = cache.lock().map_err(|e| Error::from_reason(format!("Client cache lock poisoned: {e}")))?;
+    // Another thread may have inserted while we were building — use their client if so
+    Ok(guard.entry(key).or_insert(client).clone())
 }
 
-/// Convert JS headers object to reqwest HeaderMap.
 fn to_header_map(headers: &HashMap<String, String>) -> Result<HeaderMap> {
     let mut map = HeaderMap::with_capacity(headers.len());
     for (k, v) in headers {
@@ -52,7 +64,6 @@ fn to_header_map(headers: &HashMap<String, String>) -> Result<HeaderMap> {
     Ok(map)
 }
 
-/// Extract Set-Cookie headers from response.
 fn extract_set_cookie(headers: &HeaderMap) -> Vec<String> {
     headers
         .get_all("set-cookie")
@@ -62,8 +73,7 @@ fn extract_set_cookie(headers: &HeaderMap) -> Vec<String> {
         .collect()
 }
 
-/// Convert response headers to a flat JS-friendly HashMap.
-/// For duplicate headers (like set-cookie), joins with ", ".
+/// Convert response headers to a flat HashMap. Duplicate headers joined with ", ".
 fn headers_to_map(headers: &HeaderMap) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for (name, value) in headers {
@@ -118,7 +128,7 @@ impl Task for GetTask {
 
     fn compute(&mut self) -> Result<Self::Output> {
         runtime().block_on(async {
-            let client = build_client(self.proxy_url.as_deref())?;
+            let client = get_client(self.proxy_url.as_deref())?;
             let header_map = to_header_map(&self.headers)?;
 
             let mut req = client.get(&self.url).headers(header_map);
@@ -191,10 +201,11 @@ impl Task for PostTask {
 
     fn compute(&mut self) -> Result<Self::Output> {
         runtime().block_on(async {
-            let client = build_client(self.proxy_url.as_deref())?;
+            let client = get_client(self.proxy_url.as_deref())?;
             let header_map = to_header_map(&self.headers)?;
 
-            let mut req = client.post(&self.url).headers(header_map).body(self.body.clone());
+            let body = std::mem::take(&mut self.body);
+            let mut req = client.post(&self.url).headers(header_map).body(body);
             if let Some(t) = self.timeout_sec {
                 req = req.timeout(Duration::from_secs(t as u64));
             }
@@ -228,15 +239,10 @@ pub struct StreamMeta {
     pub set_cookie_headers: Vec<String>,
 }
 
-/// Streaming POST: sends the request, returns metadata immediately,
-/// then pushes body chunks via the `on_chunk(err?, chunk?)` callback.
+/// Streaming POST: returns metadata immediately, pushes chunks via callback.
 ///
-/// JS signature:
-///   httpPostStream(url, headers, body, onChunk, proxyUrl?) → Promise<StreamMeta>
-///
-/// onChunk(null, Buffer)  — data chunk
-/// onChunk(null, null)    — stream ended
-/// onChunk(Error, null)   — stream error
+/// onChunk(Buffer)  — data chunk
+/// onChunk(null)    — stream ended (clean EOF or after error)
 #[napi]
 pub fn http_post_stream(
     url: String,
@@ -271,13 +277,14 @@ impl Task for StreamPostTask {
         use futures_util::StreamExt;
 
         runtime().block_on(async {
-            let client = build_client(self.proxy_url.as_deref())?;
+            let client = get_client(self.proxy_url.as_deref())?;
             let header_map = to_header_map(&self.headers)?;
+            let body = std::mem::take(&mut self.body);
 
             let resp = client
                 .post(&self.url)
                 .headers(header_map)
-                .body(self.body.clone())
+                .body(body)
                 .send()
                 .await
                 .map_err(|e| Error::from_reason(format!("Streaming POST failed: {e}")))?;
@@ -291,7 +298,6 @@ impl Task for StreamPostTask {
                 set_cookie_headers,
             };
 
-            // Spawn a task to stream body chunks to JS
             let on_chunk = self.on_chunk.clone();
             let mut stream = resp.bytes_stream();
 
@@ -300,18 +306,14 @@ impl Task for StreamPostTask {
                     match result {
                         Ok(bytes) => {
                             let buf: Buffer = bytes.to_vec().into();
-                            on_chunk.call(
-                                Some(buf),
-                                ThreadsafeFunctionCallMode::NonBlocking,
-                            );
+                            on_chunk.call(Some(buf), ThreadsafeFunctionCallMode::NonBlocking);
                         }
                         Err(e) => {
-                            eprintln!("[codex-tls] Stream read error: {e}");
+                            eprintln!("[codex-tls] Stream error: {e}");
                             break;
                         }
                     }
                 }
-                // Signal end of stream
                 on_chunk.call(None, ThreadsafeFunctionCallMode::NonBlocking);
             });
 

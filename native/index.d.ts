@@ -20,14 +20,9 @@ export interface StreamMeta {
   setCookieHeaders: Array<string>
 }
 /**
- * Streaming POST: sends the request, returns metadata immediately,
- * then pushes body chunks via the `on_chunk(err?, chunk?)` callback.
+ * Streaming POST: returns metadata immediately, pushes chunks via callback.
  *
- * JS signature:
- *   httpPostStream(url, headers, body, onChunk, proxyUrl?) → Promise<StreamMeta>
- *
- * onChunk(null, Buffer)  — data chunk
- * onChunk(null, null)    — stream ended
- * onChunk(Error, null)   — stream error
+ * onChunk(Buffer)  — data chunk
+ * onChunk(null)    — stream ended (clean EOF or after error)
  */
 export declare function httpPostStream(url: string, headers: Record<string, string>, body: string, onChunk: (arg: Buffer | undefined | null) => any, proxyUrl?: string | undefined | null): Promise<unknown>
