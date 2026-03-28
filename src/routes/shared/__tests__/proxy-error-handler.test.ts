@@ -159,6 +159,18 @@ describe("handleCodexApiError", () => {
       expect(result.action).toBe("retry");
       expect(pool.markStatus).toHaveBeenCalledWith(entryId, "expired");
     });
+
+    it("marks account banned when deactivated", () => {
+      const err = new CodexApiError(
+        401,
+        "Your OpenAI account has been deactivated, please check your email",
+      );
+
+      const result = handleCodexApiError(err, pool as never, entryId, model, tag, false);
+
+      expect(result.action).toBe("retry");
+      expect(pool.markStatus).toHaveBeenCalledWith(entryId, "banned");
+    });
   });
 
   // ── generic errors ──

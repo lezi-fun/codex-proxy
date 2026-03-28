@@ -106,11 +106,13 @@ export function handleCodexApiError(
     return { action: "retry", status: 403, message: err.message };
   }
 
-  // 4. Token invalidated
+  // 4. Token invalidated / account deactivated
   if (isTokenInvalidError(err)) {
-    pool.markStatus(entryId, "expired");
+    const isDeactivated = err.message.toLowerCase().includes("deactivated");
+    const newStatus = isDeactivated ? "banned" : "expired";
+    pool.markStatus(entryId, newStatus);
     console.warn(
-      `[${tag}] Account ${entryId} (${email}) | 401 token invalidated, trying different account...`,
+      `[${tag}] Account ${entryId} (${email}) | 401 ${isDeactivated ? "deactivated (banned)" : "token invalidated"}, trying different account...`,
     );
     return { action: "retry", status: 401, message: err.message };
   }
