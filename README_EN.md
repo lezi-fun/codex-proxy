@@ -36,11 +36,11 @@
 
 ---
 
-> **Disclaimer**: This project is independently developed and maintained by a single person — built to scratch my own itch. I have my own account pipeline and am not short on tokens; this project exists because I needed it, not to freeload off anyone.
+> Hi and welcome 👋 This project started as a personal tool for my own daily workflow, and I later open-sourced it so more people can use and improve it together.
 >
-> I open-source and maintain this voluntarily. Features get added when I need them; bugs get fixed as soon as I find them. But I am under no obligation to serve any individual user's demands.
+> Just to be clear: this project is **not** built to steal anyone's account. It's meant for users who already have their own accounts and want a smoother local proxy experience.
 >
-> Think the code is garbage? Don't use it. Think you can do better? Open a PR and join as a contributor. The issue tracker is for bug reports and suggestions — not feature demands, update nagging, or unsolicited code reviews.
+> If you run into issues, feel free to open an Issue. If you have ideas to improve it, PRs are always welcome.
 
 ---
 
@@ -77,11 +77,26 @@ docker compose up -d
 
 ### From Source
 
+If you run from source, install Rust toolchain first (recommended via rustup), then build the native addon:
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustc --version
+```
+
+```powershell
+# Windows (PowerShell)
+winget install Rustlang.Rustup
+rustc --version
+```
+
 ```bash
 git clone https://github.com/icebear0828/codex-proxy.git
 cd codex-proxy
 npm install                        # Backend deps + auto-download curl-impersonate
 cd web && npm install && cd ..     # Frontend deps
+cd native && npm install && npm run build
 npm run dev                        # Dev mode (hot reload)
 # Or: npm run build && npm start   # Production mode
 ```
