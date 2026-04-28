@@ -61,7 +61,23 @@
 
 - 准备一个 ChatGPT 账号（免费账号可用）
 - 本地可访问 `http://localhost:8080`
-- 若使用源码运行，需准备 Rust 工具链并先编译 native addon：
+- 若使用源码运行，需先安装 Rust 工具链（推荐 rustup）并编译 native addon：
+
+  ```bash
+  # macOS / Linux
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  # 验证
+  rustc --version
+  ```
+
+  ```powershell
+  # Windows（PowerShell）
+  winget install Rustlang.Rustup
+  # 验证
+  rustc --version
+  ```
+
+  然后再执行：
 
   ```bash
   cd native && npm install && npm run build

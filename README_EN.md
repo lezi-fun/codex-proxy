@@ -77,11 +77,26 @@ docker compose up -d
 
 ### From Source
 
+If you run from source, install Rust toolchain first (recommended via rustup), then build the native addon:
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustc --version
+```
+
+```powershell
+# Windows (PowerShell)
+winget install Rustlang.Rustup
+rustc --version
+```
+
 ```bash
 git clone https://github.com/icebear0828/codex-proxy.git
 cd codex-proxy
 npm install                        # Backend deps + auto-download curl-impersonate
 cd web && npm install && cd ..     # Frontend deps
+cd native && npm install && npm run build
 npm run dev                        # Dev mode (hot reload)
 # Or: npm run build && npm start   # Production mode
 ```
